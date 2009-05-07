@@ -38,7 +38,7 @@
 #define CPUINFO "/proc/cpuinfo"
 #define PIDFILE "/var/run/mfc-daemon.pid"
 
-#define GET_FAN_SPEED(t) (((t) - 38) * 180)
+#define GET_FAN_SPEED(t) (((t) - 38) * 200)
 //	(50 - 38) * 160 = 1920
 //	(60 - 38) * 160 = 3520
 //	(70 - 38) * 160 = 5120
@@ -137,8 +137,10 @@ int main(int argc, char **argv){
 #endif
 	start_daemon();
 
-	tim1.tv_sec = 0;
-	tim1.tv_nsec = 550000000;
+	/* tim1.tv_sec = 0; */
+	/* tim1.tv_nsec = 550000000; */
+	tim1.tv_sec = 1;
+	tim1.tv_nsec = 0;
 
 	//init
 	int cold=2;
@@ -362,7 +364,7 @@ void check_cpu(){
 	if((file=fopen(CPUINFO,"r"))!=NULL){
 		while (!feof(file)) {
 			fgets(buffer, sizeof(buffer),file);
-			if (!strncmp(buffer,"model name	: Intel(R) Core(TM)2 Duo CPU",39)){
+			if (!strncmp(buffer,"model name : Intel(R) Core(TM)2 Duo CPU",39)){
 				cpucount++;
 				if (cpucount==1){
 					syslog(LOG_INFO,"CPU: %s",buffer);

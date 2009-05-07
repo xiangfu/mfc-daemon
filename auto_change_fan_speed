@@ -1,0 +1,13 @@
+#!/bin/bash
+
+CPU_TEMP_TMP=`sensors | grep "Core 0" | cut -d'.' -f1`
+CPU_TEMP=${CPU_TEMP_TMP:14:2}
+
+FAN_SPEED=`expr "(" "$CPU_TEMP" "-" 38 ")" "*" 190`
+
+echo $CPU_TEMP $FAN_SPEED
+
+echo 1 | sudo tee /sys/devices/platform/applesmc.768/fan1_manual
+echo $FAN_SPEED | sudo tee /sys/devices/platform/applesmc.768/fan1_output
+echo 0 | sudo tee /sys/devices/platform/applesmc.768/fan1_manual
+

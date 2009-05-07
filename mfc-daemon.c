@@ -1,4 +1,23 @@
-//cmp-daemon	V 0.21
+/*
+ * mfc-daemon	macbook fan control
+ *
+ * (C) Copyright 2009
+ * Author: Xiangfu Liu <xiangfu.z@gmail.com>
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 3 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor,
+ * Boston, MA  02110-1301, USA
+ */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,20 +27,7 @@
 #include <signal.h>
 #include <string.h>
 #include <syslog.h>
-
-#define CPUINFO "/proc/cpuinfo"
-#define PIDFILE "/var/run/cmp-daemon.pid"
-
-#define FAN_1_MANUAL "/sys/devices/platform/applesmc.768/fan1_manual"
-#define FAN_2_MANUAL "/sys/devices/platform/applesmc.768/fan2_manual"
-
-#define RD_CPU_1_TEMP "/sys/devices/platform/coretemp.0/temp1_input"
-#define RD_CPU_2_TEMP "/sys/devices/platform/coretemp.1/temp1_input"
-
-#define RD_FAN_1 "/sys/devices/platform/applesmc.768/fan1_input"
-#define RD_FAN_2 "/sys/devices/platform/applesmc.768/fan2_input"
-#define WR_FAN_1 "/sys/devices/platform/applesmc.768/fan1_output"
-#define WR_FAN_2 "/sys/devices/platform/applesmc.768/fan2_output"
+#include "config.h"
 
 #define MIN_SPEED 2000
 #define MAX_SPEED 6000
@@ -29,12 +35,35 @@
 #define ERROR -1
 #define OK 0
 
+#define CPUINFO "/proc/cpuinfo"
+#define PIDFILE "/var/run/mfc-daemon.pid"
+
+#define GET_FAN_SPEED(t) (((t) - 38) * 180)
+//	(50 - 38) * 160 = 1920
+//	(60 - 38) * 160 = 3520
+//	(70 - 38) * 160 = 5120
+
+#define FAN_1_MANUAL "/sys/devices/platform/applesmc.768/fan1_manual"
+#define RD_FAN_1 "/sys/devices/platform/applesmc.768/fan1_input"
+#define WR_FAN_1 "/sys/devices/platform/applesmc.768/fan1_output"
+
+#define RD_CPU_1_TEMP "/sys/devices/platform/coretemp.0/temp1_input"
+#define RD_CPU_2_TEMP "/sys/devices/platform/coretemp.1/temp1_input"
+
+#ifndef MACBOOK51
+#define FAN_2_MANUAL "/sys/devices/platform/applesmc.768/fan2_manual"
+#define RD_FAN_2 "/sys/devices/platform/applesmc.768/fan2_input"
+#define WR_FAN_2 "/sys/devices/platform/applesmc.768/fan2_output"
+void write_fan_2_manual(int);
+void write_fan_2_speed(int);
+#endif
+
 int read_cpu_1_temp(void);
 int read_cpu_2_temp(void);
+
 void write_fan_1_manual(int);
-void write_fan_2_manual(int);
 void write_fan_1_speed(int);
-void write_fan_2_speed(int);
+
 void write_pidfile(void);
 void check_pidfile(void);
 void check_cpu(void);
@@ -45,18 +74,19 @@ int set_min_max_fan_speed(int);
 void Signal_Handler(int sig){
 	switch(sig){
 		case SIGHUP:
-			break;		
+			break;
 		case SIGTERM:
 			write_fan_1_manual(0);
+#ifndef MACBOOK51
 			write_fan_2_manual(0);
+#endif
 			unlink(PIDFILE);
 			syslog(LOG_INFO, "Stop");
 			closelog();
 			exit(OK);
-			break;		
-		}	
+			break;
+		}
 }
-
 
 void start_daemon(void){
 	int i=0;
@@ -94,15 +124,17 @@ int main(int argc, char **argv){
 
 	struct timespec timx,tim1;
 
-	openlog("cmp-daemon", LOG_PID, LOG_DAEMON);
+	openlog("mfc-daemon", LOG_PID, LOG_DAEMON);
+
 
 	/* check machine and pidfile*/
 	check_cpu();
 	check_pidfile();
 	write_pidfile();
 	write_fan_1_manual(1);
+#ifndef MACBOOK51
 	write_fan_2_manual(1);
-
+#endif
 	start_daemon();
 
 	tim1.tv_sec = 0;
@@ -119,15 +151,16 @@ int main(int argc, char **argv){
 
 	int rd_cpu_1_temp=read_cpu_1_temp();
 	int rd_cpu_2_temp=read_cpu_2_temp();
+
 	int temp=(rd_cpu_1_temp + rd_cpu_2_temp)/2000;
 	int old_temp=(rd_cpu_1_temp + rd_cpu_2_temp)/2000;
-	int fan_speed=(temp-38)*160;
+	int fan_speed=GET_FAN_SPEED(temp);
 
-	write_fan_1_manual(1);
-	write_fan_2_manual(1);
 	fan_speed=set_min_max_fan_speed(fan_speed);
 	write_fan_1_speed(fan_speed);	
+#ifndef MACBOOK51
 	write_fan_2_speed(fan_speed);
+#endif
 
 	while(1){
 
@@ -138,7 +171,9 @@ int main(int argc, char **argv){
 
 		if (wr_manual==9){
 			write_fan_1_manual(1);
+#ifndef MACBOOK51
 			write_fan_2_manual(1);
+#endif
 			wr_manual=0;
 		}
 
@@ -155,15 +190,14 @@ int main(int argc, char **argv){
 
 		if ((cold==3)||(hot==3)){
 			//	temp = average of both cpu's
-			fan_speed=(temp-38)*160;
-			//	(50 - 38) * 160 = 1920
-			//	(60 - 38) * 160 = 3520
-			//	(70 - 38) * 160 = 5120
+			fan_speed=GET_FAN_SPEED(temp);
 			fan_speed=set_min_max_fan_speed(fan_speed);
 
 			if (fan_speed!=old_fan_speed){
 				write_fan_1_speed(fan_speed);
+#ifndef MACBOOK51
 				write_fan_2_speed(fan_speed);
+#endif
 				change_number=log_fan_speed(fan_speed,change_number,temp);
 				old_fan_speed=fan_speed;
 			}
@@ -175,12 +209,12 @@ int main(int argc, char **argv){
 		old_temp=temp;
 
 		if (nanosleep(&tim1,&timx)<OK){
+			syslog(LOG_ERR,"Error nanosleep");
 			closelog();
 			exit(ERROR);
 		}
 	}
 }
-
 
 int read_cpu_1_temp(void){
 	int temp;
@@ -199,7 +233,6 @@ int read_cpu_1_temp(void){
 	}
 }
 
-
 int read_cpu_2_temp(void){
 	int temp;
 	FILE *file;
@@ -217,26 +250,13 @@ int read_cpu_2_temp(void){
 	}
 }
 
-int set_min_max_fan_speed(int fan_speed){
-
-	if (fan_speed<MIN_SPEED){
-		fan_speed=MIN_SPEED;
-	}
-	if (fan_speed>MAX_SPEED){
-		fan_speed=MAX_SPEED;
-	}
-
-	return fan_speed;
-}
-
 void write_fan_1_speed(int fan_speed_1){
 	FILE *file;
 
 	if((file=fopen(WR_FAN_1, "w"))!=NULL){
 		fprintf(file,"%d",fan_speed_1);
 		fclose(file);
-	}
-	else{
+	}else{
 		syslog(LOG_ERR, "Error write_fan_1_speed, applesmc loaded?");
 		unlink(PIDFILE);
 		closelog();
@@ -244,6 +264,20 @@ void write_fan_1_speed(int fan_speed_1){
 	}
 }
 
+void write_fan_1_manual(int fan_manual_1){
+	FILE *file;
+	if((file=fopen(FAN_1_MANUAL, "w"))!=NULL){
+		fprintf(file,"%d",fan_manual_1);
+		fclose(file);
+	}else{
+		syslog(LOG_ERR, "Error write_fan_1_manual, applesmc loaded?");
+		unlink(PIDFILE);
+		closelog();
+		exit(ERROR);
+	}
+}
+
+#ifndef MACBOOK51
 
 void write_fan_2_speed(int fan_speed_2){
 	FILE *file;
@@ -260,29 +294,6 @@ void write_fan_2_speed(int fan_speed_2){
 	}
 }
 
-
-int log_fan_speed(int fan_speed,int change_number,int temp){
-	change_number++;
-	syslog(LOG_INFO, "Change %d: fan speed %d RPM temperature %d degree celsius",change_number,fan_speed,temp);
-	return change_number;
-}
-
-
-void write_fan_1_manual(int fan_manual_1){
-	FILE *file;
-	if((file=fopen(FAN_1_MANUAL, "w"))!=NULL){
-		fprintf(file,"%d",fan_manual_1);
-		fclose(file);
-	}
-	else{
-		syslog(LOG_ERR, "Error write_fan_1_manual, applesmc loaded?");
-		unlink(PIDFILE);
-		closelog();
-		exit(ERROR);
-	}
-}
-
-
 void write_fan_2_manual(int fan_manual_2){
 	FILE *file;
 	if((file=fopen(FAN_2_MANUAL, "w"))!=NULL){
@@ -296,7 +307,26 @@ void write_fan_2_manual(int fan_manual_2){
 		exit(ERROR);
 	}
 }
+#endif
 
+int set_min_max_fan_speed(int fan_speed){
+
+	if (fan_speed<MIN_SPEED){
+		fan_speed=MIN_SPEED;
+	}
+	if (fan_speed>MAX_SPEED){
+		fan_speed=MAX_SPEED;
+	}
+
+	return fan_speed;
+}
+
+int log_fan_speed(int fan_speed,int change_number,int temp){
+	change_number++;
+	syslog(LOG_INFO, "Change %d: fan speed %d RPM temperature %d degree celsius",
+	       change_number,fan_speed,temp);
+	return change_number;
+}
 
 void write_pidfile(){
 	FILE *file;
@@ -353,3 +383,4 @@ void check_cpu(){
 		exit(ERROR);
 	}
 }
+

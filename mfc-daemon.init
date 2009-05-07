@@ -1,11 +1,10 @@
 #!/bin/bash
 
-#cmp-daemon 0.21
+#mfc-daemon 0.1
 
-. /etc/rc.conf
-. /etc/rc.d/functions
+. /etc/rc.local
 
-PROG_NAME=cmp-daemon
+PROG_NAME=mfc-daemon
 PROG_BIN="/usr/sbin/${PROG_NAME}"
 PID=`pidof -o %PPID ${PROG_BIN}`
 

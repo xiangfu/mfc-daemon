@@ -364,7 +364,7 @@ void check_cpu(){
 	if((file=fopen(CPUINFO,"r"))!=NULL){
 		while (!feof(file)) {
 			fgets(buffer, sizeof(buffer),file);
-			if (!strncmp(buffer,"model name : Intel(R) Core(TM)2 Duo CPU",39)){
+			if (!strncmp(buffer,"model name	: Intel(R) Core(TM)2 Duo CPU",39)){
 				cpucount++;
 				if (cpucount==1){
 					syslog(LOG_INFO,"CPU: %s",buffer);

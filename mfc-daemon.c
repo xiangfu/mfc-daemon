@@ -38,7 +38,7 @@
 #define CPUINFO "/proc/cpuinfo"
 #define PIDFILE "/var/run/mfc-daemon.pid"
 
-#define GET_FAN_SPEED(t) (((t) - 38) * 200)
+#define GET_FAN_SPEED(t) (((t) - 38) * 180)
 //	(50 - 38) * 160 = 1920
 //	(60 - 38) * 160 = 3520
 //	(70 - 38) * 160 = 5120

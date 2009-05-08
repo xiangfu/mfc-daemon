@@ -2,8 +2,6 @@
 
 #mfc-daemon 0.1
 
-. /etc/rc.local
-
 PROG_NAME=mfc-daemon
 PROG_BIN="/usr/sbin/${PROG_NAME}"
 PID=`pidof -o %PPID ${PROG_BIN}`

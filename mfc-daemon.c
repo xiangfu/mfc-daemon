@@ -1,5 +1,5 @@
 /*
- * mfc-daemon	macbook fan control
+ * mfc-daemon	macbook auto fan control deamon
  *
  * (C) Copyright 2009
  * Author: Xiangfu Liu <xiangfu.z@gmail.com>
@@ -29,31 +29,10 @@
 #include <syslog.h>
 #include "config.h"
 
-#define MIN_SPEED 2000
-#define MAX_SPEED 6000
-
 #define ERROR -1
 #define OK 0
 
-#define CPUINFO "/proc/cpuinfo"
-#define PIDFILE "/var/run/mfc-daemon.pid"
-
-#define GET_FAN_SPEED(t) (((t) - 38) * 180)
-//	(50 - 38) * 160 = 1920
-//	(60 - 38) * 160 = 3520
-//	(70 - 38) * 160 = 5120
-
-#define FAN_1_MANUAL "/sys/devices/platform/applesmc.768/fan1_manual"
-#define RD_FAN_1 "/sys/devices/platform/applesmc.768/fan1_input"
-#define WR_FAN_1 "/sys/devices/platform/applesmc.768/fan1_output"
-
-#define RD_CPU_1_TEMP "/sys/devices/platform/coretemp.0/temp1_input"
-#define RD_CPU_2_TEMP "/sys/devices/platform/coretemp.1/temp1_input"
-
 #ifndef MACBOOK51
-#define FAN_2_MANUAL "/sys/devices/platform/applesmc.768/fan2_manual"
-#define RD_FAN_2 "/sys/devices/platform/applesmc.768/fan2_input"
-#define WR_FAN_2 "/sys/devices/platform/applesmc.768/fan2_output"
 void write_fan_2_manual(int);
 void write_fan_2_speed(int);
 #endif
@@ -137,10 +116,8 @@ int main(int argc, char **argv){
 #endif
 	start_daemon();
 
-	/* tim1.tv_sec = 0; */
-	/* tim1.tv_nsec = 550000000; */
-	tim1.tv_sec = 1;
-	tim1.tv_nsec = 0;
+	tim1.tv_sec = TV_SEC;
+	tim1.tv_nsec = TV_NSEC;
 
 	//init
 	int cold=2;
@@ -385,4 +362,3 @@ void check_cpu(){
 		exit(ERROR);
 	}
 }
-

@@ -33,6 +33,8 @@ work: $(OBJS)
 
 install::
 	install -T $(TARGETS) /usr/sbin/$(TARGETS)
+
+startup::
 	cp mfc-daemon.init /etc/init.d/mfc-daemon
 	ln -s /etc/init.d/mfc-daemon /etc/rc2.d/S97mfc-daemon
 	ln -s /etc/init.d/mfc-daemon /etc/rc3.d/S97mfc-daemon

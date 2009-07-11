@@ -1,12 +1,9 @@
-
-origin from:
-
+Origin from:
 http://aur.archlinux.org/packages.php?ID=21391
 
 now the mfc-daemon.init is not always work.
 so FOR NOW you can run "sudo mfc-daemon" .
 then it's will work fine.
-
 
 TODO:
 add some option then we  can control the speed 

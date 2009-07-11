@@ -187,7 +187,7 @@ int main(int argc, char **argv){
 
 		old_temp=temp;
 
-		if (nanosleep(&tim1,&timx)<OK){
+		if (nanosleep(&tim1,&timx) < OK){
 			syslog(LOG_ERR,"Error nanosleep");
 			closelog();
 			exit(ERROR);

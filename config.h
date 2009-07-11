@@ -31,7 +31,7 @@
 //	(50 - 38) * 160 = 1920
 //	(60 - 38) * 160 = 3520
 //	(70 - 38) * 160 = 5120
-#define TV_SEC	10		/*  */
+#define TV_SEC	5		/*  */
 #define TV_NSEC	0		/*  */
 
 #define FAN_1_MANUAL "/sys/devices/platform/applesmc.768/fan1_manual"

@@ -114,7 +114,7 @@ int main(int argc, char **argv){
 	if (cpucount > 1) {
 		write_fan_2_manual(1);
 	}
-	//start_daemon();
+	start_daemon();
 
 	tim1.tv_sec = TV_SEC;
 	tim1.tv_nsec = TV_NSEC;

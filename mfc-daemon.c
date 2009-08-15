@@ -32,10 +32,8 @@
 #define ERROR -1
 #define OK 0
 
-#ifndef MACBOOK51
 void write_fan_2_manual(int);
 void write_fan_2_speed(int);
-#endif
 
 int read_cpu_1_temp(void);
 int read_cpu_2_temp(void);
@@ -45,20 +43,22 @@ void write_fan_1_speed(int);
 
 void write_pidfile(void);
 void check_pidfile(void);
-void check_cpu(void);
+int check_cpu(void);
 int log_fan_speed(int,int,int);
 int set_min_max_fan_speed(int);
 
+static int cpucount = 0;
 
 void Signal_Handler(int sig){
 	switch(sig){
 		case SIGHUP:
 			break;
 		case SIGTERM:
+			syslog(LOG_INFO, "Signal_Handler");
 			write_fan_1_manual(0);
-#ifndef MACBOOK51
-			write_fan_2_manual(0);
-#endif
+			if (cpucount > 1) {
+				write_fan_2_manual(0);
+			}
 			unlink(PIDFILE);
 			syslog(LOG_INFO, "Stop");
 			closelog();
@@ -107,14 +107,14 @@ int main(int argc, char **argv){
 
 
 	/* check machine and pidfile*/
-	check_cpu();
+	cpucount = check_cpu();
 	check_pidfile();
 	write_pidfile();
 	write_fan_1_manual(1);
-#ifndef MACBOOK51
-	write_fan_2_manual(1);
-#endif
-	start_daemon();
+	if (cpucount > 1) {
+		write_fan_2_manual(1);
+	}
+	//start_daemon();
 
 	tim1.tv_sec = TV_SEC;
 	tim1.tv_nsec = TV_NSEC;
@@ -137,9 +137,9 @@ int main(int argc, char **argv){
 
 	fan_speed=set_min_max_fan_speed(fan_speed);
 	write_fan_1_speed(fan_speed);	
-#ifndef MACBOOK51
-	write_fan_2_speed(fan_speed);
-#endif
+	if (cpucount > 1) {
+		write_fan_2_speed(fan_speed);
+	}
 
 	while(1){
 
@@ -150,9 +150,9 @@ int main(int argc, char **argv){
 
 		if (wr_manual==9){
 			write_fan_1_manual(1);
-#ifndef MACBOOK51
-			write_fan_2_manual(1);
-#endif
+			if (cpucount > 1) {
+				write_fan_2_manual(1);
+			}
 			wr_manual=0;
 		}
 
@@ -174,9 +174,9 @@ int main(int argc, char **argv){
 
 			if (fan_speed!=old_fan_speed){
 				write_fan_1_speed(fan_speed);
-#ifndef MACBOOK51
-				write_fan_2_speed(fan_speed);
-#endif
+				if (cpucount > 1) {
+					write_fan_2_speed(fan_speed);
+				}
 				change_number=log_fan_speed(fan_speed,change_number,temp);
 				old_fan_speed=fan_speed;
 			}
@@ -216,6 +216,12 @@ int read_cpu_2_temp(void){
 	int temp;
 	FILE *file;
 
+	if (cpucount == 1) {
+		// If there's a single core pretend that the second core has the same
+		// temperature as the first core.
+		return read_cpu_1_temp();
+	}
+	
 	if ((file=fopen(RD_CPU_2_TEMP,"r"))!=NULL){
 		fscanf(file,"%d", &temp);
 		fclose(file);
@@ -256,8 +262,6 @@ void write_fan_1_manual(int fan_manual_1){
 	}
 }
 
-#ifndef MACBOOK51
-
 void write_fan_2_speed(int fan_speed_2){
 	FILE *file;
 
@@ -286,7 +290,6 @@ void write_fan_2_manual(int fan_manual_2){
 		exit(ERROR);
 	}
 }
-#endif
 
 int set_min_max_fan_speed(int fan_speed){
 
@@ -326,14 +329,14 @@ void check_pidfile(){
 	if((file=fopen(PIDFILE,"r"))!=NULL){
 		/* if PIDFILE exist */
 		fclose(file);
-		syslog(LOG_ERR,"Error check_pidfile");
+		syslog(LOG_ERR,"Error check_pidfile: %s", PIDFILE);
 		closelog();
 		exit(ERROR);
 	}
 }
 
 
-void check_cpu(){
+int check_cpu(){
 	FILE *file;
 	char buffer[80];
 	int cpucount=0;
@@ -349,6 +352,7 @@ void check_cpu(){
 			}
 		}
 		fclose(file);
+					syslog(LOG_INFO,"cpu counts %d", cpucount);
 	}	
 	else{
 		syslog(LOG_ERR,"Error check_cpu");
@@ -356,9 +360,5 @@ void check_cpu(){
 		exit(ERROR);
 	}
 
-	if (cpucount!=2){
-		syslog(LOG_ERR,"Error check_cpu count: %d",cpucount);
-		closelog();
-		exit(ERROR);
-	}
+	return cpucount;
 }

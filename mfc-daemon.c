@@ -27,10 +27,14 @@
 #include <signal.h>
 #include <string.h>
 #include <syslog.h>
+#include <stdarg.h>
 #include "config.h"
 
 #define ERROR -1
 #define OK 0
+
+#define QUIT_DAEMON(message, ...) quit_daemon(1, message " [%s:%d]", ##__VA_ARGS__, __FUNCTION__, __LINE__)
+#define QUIT_DAEMON_KEEP_PIDFILE(message, ...) quit_daemon(0, message " [%s:%d]", ##__VA_ARGS__, __FUNCTION__, __LINE__)
 
 void write_fan_2_manual(int);
 void write_fan_2_speed(int);
@@ -49,6 +53,22 @@ int set_min_max_fan_speed(int);
 
 static int cpucount = 0;
 
+void quit_daemon (int remove_pid, char *format, ...) {
+        va_list args;
+
+        va_start(args, format);
+        vsyslog(LOG_ERR, format, args);
+	vprintf(format, args);printf("\n");
+        va_end(args);
+
+	closelog();
+	if (remove_pid) {
+		unlink(PIDFILE);
+	}
+	exit(ERROR);
+}
+
+
 void Signal_Handler(int sig){
 	switch(sig){
 		case SIGHUP:
@@ -59,10 +79,7 @@ void Signal_Handler(int sig){
 			if (cpucount > 1) {
 				write_fan_2_manual(0);
 			}
-			unlink(PIDFILE);
-			syslog(LOG_INFO, "Stop");
-			closelog();
-			exit(OK);
+			QUIT_DAEMON("Stop");
 			break;
 		}
 }
@@ -74,9 +91,7 @@ void start_daemon(void){
 
 	if (pid<0){ 
 		/* fork error */
-		syslog(LOG_ERR,"Error cannot fork");
-		closelog();
-		exit(ERROR);
+		QUIT_DAEMON("Error cannot fork");
 	}
 
 	else if (pid>0){
@@ -85,9 +100,7 @@ void start_daemon(void){
 	}
 
 	if(setsid() == ERROR){
-		syslog(LOG_ERR,"Error setsid");
-		closelog();
-		exit(ERROR);
+		QUIT_DAEMON("Error setsid");
 	}
 
 	for (i=getdtablesize();i>=0;--i) close(i); 
@@ -114,7 +127,7 @@ int main(int argc, char **argv){
 	if (cpucount > 1) {
 		write_fan_2_manual(1);
 	}
-	start_daemon();
+	//start_daemon();
 
 	tim1.tv_sec = TV_SEC;
 	tim1.tv_nsec = TV_NSEC;
@@ -188,9 +201,7 @@ int main(int argc, char **argv){
 		old_temp=temp;
 
 		if (nanosleep(&tim1,&timx) < OK){
-			syslog(LOG_ERR,"Error nanosleep");
-			closelog();
-			exit(ERROR);
+			QUIT_DAEMON("Error nanosleep");
 		}
 	}
 }
@@ -204,12 +215,8 @@ int read_cpu_1_temp(void){
 		fclose(file);
 		return temp;
 	}
-	else{
-		syslog(LOG_ERR,"Error read_cpu_1_temp");
-		unlink(PIDFILE);
-		closelog();
-		exit(ERROR);
-	}
+	QUIT_DAEMON("Failed to read the temperature of CPU 1");
+	return 0;
 }
 
 int read_cpu_2_temp(void){
@@ -227,12 +234,8 @@ int read_cpu_2_temp(void){
 		fclose(file);
 		return temp;
 	}
-	else {
-		syslog(LOG_ERR,"Error read_cpu_2_temp");
-		unlink(PIDFILE);
-		closelog();
-		exit(ERROR);
-	}
+	QUIT_DAEMON("Failed to read the temperature of CPU 2");
+	return 0;
 }
 
 void write_fan_1_speed(int fan_speed_1){
@@ -241,12 +244,9 @@ void write_fan_1_speed(int fan_speed_1){
 	if((file=fopen(WR_FAN_1, "w"))!=NULL){
 		fprintf(file,"%d",fan_speed_1);
 		fclose(file);
-	}else{
-		syslog(LOG_ERR, "Error write_fan_1_speed, applesmc loaded?");
-		unlink(PIDFILE);
-		closelog();
-		exit(ERROR);
+		return;
 	}
+	QUIT_DAEMON("Failed to set the speed of fan 1, is applesmc loaded?");
 }
 
 void write_fan_1_manual(int fan_manual_1){
@@ -255,10 +255,7 @@ void write_fan_1_manual(int fan_manual_1){
 		fprintf(file,"%d",fan_manual_1);
 		fclose(file);
 	}else{
-		syslog(LOG_ERR, "Error write_fan_1_manual, applesmc loaded?");
-		unlink(PIDFILE);
-		closelog();
-		exit(ERROR);
+		QUIT_DAEMON("Failed to set the 'manual' of fan 1, is applesmc loaded?");
 	}
 }
 
@@ -270,10 +267,7 @@ void write_fan_2_speed(int fan_speed_2){
 		fclose(file);
 	}
 	else{
-		unlink(PIDFILE);
-		syslog(LOG_ERR, "Error write_fan_2_speed, applesmc loaded?");
-		closelog();
-		exit(ERROR);
+		QUIT_DAEMON("Failed to set the speed of fan 1, is applesmc loaded?");
 	}
 }
 
@@ -284,10 +278,7 @@ void write_fan_2_manual(int fan_manual_2){
 		fclose(file);
 	}
 	else{
-		syslog(LOG_ERR, "Error write_fan_2_manual, applesmc loaded?");
-		unlink(PIDFILE);
-		closelog();
-		exit(ERROR);
+		QUIT_DAEMON("Failed to set the 'manual' of fan 1, is applesmc loaded?");
 	}
 }
 
@@ -317,9 +308,7 @@ void write_pidfile(){
 		fclose(file);
 	}
 	else{
-		syslog(LOG_ERR, "Error write_pidfile");
-		closelog();
-		exit(ERROR);
+		QUIT_DAEMON_KEEP_PIDFILE("Can't write PID file %s", PIDFILE);
 	}
 }
 
@@ -329,9 +318,7 @@ void check_pidfile(){
 	if((file=fopen(PIDFILE,"r"))!=NULL){
 		/* if PIDFILE exist */
 		fclose(file);
-		syslog(LOG_ERR,"Error check_pidfile: %s", PIDFILE);
-		closelog();
-		exit(ERROR);
+		QUIT_DAEMON_KEEP_PIDFILE("PID file %s already exists, is the daemon running?", PIDFILE);
 	}
 }
 
@@ -352,12 +339,10 @@ int check_cpu(){
 			}
 		}
 		fclose(file);
-					syslog(LOG_INFO,"cpu counts %d", cpucount);
+		syslog(LOG_INFO,"cpu counts %d", cpucount);
 	}	
 	else{
-		syslog(LOG_ERR,"Error check_cpu");
-		closelog();
-		exit(ERROR);
+		QUIT_DAEMON("Can't read the CPU type from %s", CPUINFO);
 	}
 
 	return cpucount;

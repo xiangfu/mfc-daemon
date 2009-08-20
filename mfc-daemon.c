@@ -33,8 +33,7 @@
 #define ERROR -1
 #define OK 0
 
-#define QUIT_DAEMON(message, ...) quit_daemon(1, message " [%s:%d]", ##__VA_ARGS__, __FUNCTION__, __LINE__)
-#define QUIT_DAEMON_KEEP_PIDFILE(message, ...) quit_daemon(0, message " [%s:%d]", ##__VA_ARGS__, __FUNCTION__, __LINE__)
+#define QUIT_DAEMON(message, ...) quit_daemon(message " [%s:%d]", ##__VA_ARGS__, __FUNCTION__, __LINE__)
 
 void write_fan_2_manual(int);
 void write_fan_2_speed(int);
@@ -52,8 +51,9 @@ int log_fan_speed(int,int,int);
 int set_min_max_fan_speed(int);
 
 static int cpucount = 0;
+static int pidfile_created = 0;
 
-void quit_daemon (int remove_pid, char *format, ...) {
+void quit_daemon (char *format, ...) {
         va_list args;
 
         va_start(args, format);
@@ -63,7 +63,7 @@ void quit_daemon (int remove_pid, char *format, ...) {
         va_end(args);
 
 	closelog();
-	if (remove_pid) {
+	if (pidfile_created) {
 		unlink(PIDFILE);
 	}
 	exit(ERROR);
@@ -124,6 +124,7 @@ int main(int argc, char **argv){
 	cpucount = check_cpu();
 	check_pidfile();
 	write_pidfile();
+	pidfile_created = 1;
 	write_fan_1_manual(1);
 	if (cpucount > 1) {
 		write_fan_2_manual(1);
@@ -309,7 +310,7 @@ void write_pidfile(){
 		fclose(file);
 	}
 	else{
-		QUIT_DAEMON_KEEP_PIDFILE("Can't write PID file %s", PIDFILE);
+		QUIT_DAEMON("Can't write PID file %s", PIDFILE);
 	}
 }
 
@@ -319,7 +320,7 @@ void check_pidfile(){
 	if((file=fopen(PIDFILE,"r"))!=NULL){
 		/* if PIDFILE exist */
 		fclose(file);
-		QUIT_DAEMON_KEEP_PIDFILE("PID file %s already exists, is the daemon running?", PIDFILE);
+		QUIT_DAEMON("PID file %s already exists, is the daemon running?", PIDFILE);
 	}
 }
 

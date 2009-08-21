@@ -54,13 +54,13 @@ static int cpucount = 0;
 static int pidfile_created = 0;
 
 void quit_daemon (char *format, ...) {
-        va_list args;
+		va_list args;
 
-        va_start(args, format);
-        vsyslog(LOG_ERR, format, args);
+		va_start(args, format);
+		vsyslog(LOG_ERR, format, args);
 //	vprintf(format, args);
 //	printf("\n");
-        va_end(args);
+		va_end(args);
 
 	closelog();
 	if (pidfile_created) {
@@ -299,7 +299,7 @@ int set_min_max_fan_speed(int fan_speed){
 int log_fan_speed(int fan_speed,int change_number,int temp){
 	change_number++;
 	syslog(LOG_INFO, "Change %d: fan speed %d RPM temperature %d degree celsius",
-	       change_number,fan_speed,temp);
+		   change_number,fan_speed,temp);
 	return change_number;
 }
 

@@ -304,7 +304,7 @@ void write_pidfile(){
 void check_pidfile(){
 	FILE *file = mfc_fopen(MODE_READ, PIDFILE);
 	if (file == NULL) {
-		/* We are expecting that the fiel DOES NOT exist, so there should be an error */
+		/* We are expecting that the file DOES NOT exist, so there should be an error */
 		return;
 	}
 

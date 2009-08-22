@@ -50,7 +50,7 @@ void check_pidfile(void);
 int check_cpu(void);
 int log_fan_speed(int,int,int);
 int set_min_max_fan_speed(int);
-
+int get_cpu_temperature(void);
 
 /**
  * The daemon's global context. This data structure contains all global
@@ -175,11 +175,8 @@ int main(int argc, char **argv){
 
 	syslog(LOG_INFO,"Start");
 
-	int rd_cpu_1_temp=read_cpu_temp(1);
-	int rd_cpu_2_temp=read_cpu_temp(2);
-
-	int temp=(rd_cpu_1_temp + rd_cpu_2_temp)/2000;
-	int old_temp=(rd_cpu_1_temp + rd_cpu_2_temp)/2000;
+	int temp = get_cpu_temperature();
+	int old_temp = temp;
 	int fan_speed=GET_FAN_SPEED(temp);
 
 	fan_speed=set_min_max_fan_speed(fan_speed);
@@ -190,11 +187,8 @@ int main(int argc, char **argv){
 	}
 	while(1){
 
-		rd_cpu_1_temp = read_cpu_temp(1);
-		rd_cpu_2_temp = read_cpu_temp(2);
 
 		wr_manual++;
-
 		if (wr_manual==9){
 			for (cpu = 1; cpu <= MFC.cpucount; ++cpu) {
 				write_fan_manual(cpu, 1);
@@ -202,8 +196,7 @@ int main(int argc, char **argv){
 			wr_manual=0;
 		}
 
-		temp=(rd_cpu_1_temp+rd_cpu_2_temp)/2000;
-
+		temp = get_cpu_temperature();
 		if (temp<old_temp){
 			cold++;
 			hot=0;
@@ -346,4 +339,13 @@ int check_cpu(){
 	syslog(LOG_INFO, "cpu counts %d", cpucount);
 
 	return cpucount;
+}
+
+int get_cpu_temperature() {
+	int rd_cpu_1_temp=read_cpu_temp(1);
+	int rd_cpu_2_temp=read_cpu_temp(2);
+
+	int temp=(rd_cpu_1_temp + rd_cpu_2_temp)/2000;
+
+	return temp;
 }

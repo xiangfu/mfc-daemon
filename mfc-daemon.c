@@ -323,8 +323,9 @@ void check_pidfile(){
 
 int check_cpu(){
 	FILE *file;
-	char buffer[80];
-	int cpucount=0;
+	char *line = NULL;
+	size_t size = 0;
+	int cpucount = 0;
 
 	file = mfc_fopen(MODE_READ, CPUINFO);
 	if (file == NULL) {
@@ -332,11 +333,11 @@ int check_cpu(){
 	}
 
 	while (!feof(file)) {
-		fgets(buffer, sizeof(buffer), file);
-		if (!strncmp(buffer, CPU_LABEL, strlen(CPU_LABEL))) {
+		getline(&line, &size, file);
+		if (!strncmp(line, CPU_LABEL, strlen(CPU_LABEL))) {
 			cpucount++;
 			if (cpucount == 1) {
-				syslog(LOG_INFO, "CPU: %s", buffer);
+				syslog(LOG_INFO, "CPU: %s", line);
 			}
 		}
 	}

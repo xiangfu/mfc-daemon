@@ -180,11 +180,11 @@ int main(int argc, char **argv){
 	int fan_speed=GET_FAN_SPEED(temp);
 
 	fan_speed=set_min_max_fan_speed(fan_speed);
-	write_fan_speed(1, fan_speed);
-	if (MFC.cpucount > 1) {
-		write_fan_speed(2, fan_speed);
-	}
 
+	int cpu;
+	for (cpu = 1; cpu <= MFC.cpucount; ++cpu) {
+		write_fan_speed(cpu, fan_speed);
+	}
 	while(1){
 
 		rd_cpu_1_temp = read_cpu_temp(1);
@@ -193,9 +193,8 @@ int main(int argc, char **argv){
 		wr_manual++;
 
 		if (wr_manual==9){
-			write_fan_manual(1, 1);
-			if (MFC.cpucount > 1) {
-				write_fan_manual(2, 1);
+			for (cpu = 1; cpu <= MFC.cpucount; ++cpu) {
+				write_fan_manual(cpu, 1);
 			}
 			wr_manual=0;
 		}
@@ -217,9 +216,8 @@ int main(int argc, char **argv){
 			fan_speed=set_min_max_fan_speed(fan_speed);
 
 			if (fan_speed!=old_fan_speed){
-				write_fan_speed(1, fan_speed);
-				if (MFC.cpucount > 1) {
-					write_fan_speed(2, fan_speed);
+				for (cpu = 1; cpu <= MFC.cpucount; ++cpu) {
+					write_fan_speed(cpu, fan_speed);
 				}
 				change_number=log_fan_speed(fan_speed,change_number,temp);
 				old_fan_speed=fan_speed;

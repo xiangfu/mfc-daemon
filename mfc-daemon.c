@@ -34,6 +34,11 @@
 #define ERROR -1
 #define OK 0
 
+#define MODE_WRITE "w"
+#define MODE_READ  "r"
+
+#define CPU_LABEL  "model name	: Intel(R) Core(TM)2 Duo CPU"
+
 #define QUIT_DAEMON(message, ...) quit_daemon(message " [%s:%d]", ##__VA_ARGS__, __FUNCTION__, __LINE__)
 
 void write_fan_manual(int, int);
@@ -74,19 +79,24 @@ void quit_daemon (char *format, ...) {
 	exit(ERROR);
 }
 
-char* mfc_sprintf (const char *format, ...) {
-	char *string;
+FILE* mfc_fopen (const char* mode, const char *format, ...) {
+	char *filename;
 	int code;
 	va_list args;
+	FILE *file;
 
 	va_start(args, format);
-	code = vasprintf(&string, format, args);
+	code = vasprintf(&filename, format, args);
 	va_end(args);
 
 	if (code < 0) {
-		QUIT_DAEMON("Failed to allocate");
+		QUIT_DAEMON("Failed to allocate filename for pattern %s", format);
 	}
-	return string;
+
+	file = open(filename, mode);
+	free(filename);
+
+	return file;
 }
 
 void Signal_Handler(int sig){
@@ -230,7 +240,6 @@ int main(int argc, char **argv){
 int read_cpu_temp(int index){
 	int temp;
 	FILE *file;
-	char *filename;
 
 	if (MFC.cpucount == 1) {
 		// If there's a single core pretend that the second core has the same
@@ -239,10 +248,7 @@ int read_cpu_temp(int index){
 	}
 
 	/* The CPU temperature file index starts at 0 */
-	filename = mfc_sprintf(FILE_CPU_TEMP, index - 1);
-	file = fopen(filename, "r");
-	free(filename);
-
+	file = mfc_fopen(MODE_READ, FILE_CPU_TEMP, index - 1);
 	if (file == NULL) {
 		QUIT_DAEMON("Failed to read the temperature of CPU %d", index);
 	}
@@ -254,36 +260,26 @@ int read_cpu_temp(int index){
 
 void write_fan_speed(int index, int speed){
 	FILE *file;
-	char *filename;
 
-	filename = mfc_sprintf(FILE_FAN_SPEED, index);
-	file = fopen(filename, "w");
-	free(filename);
-
+	file = mfc_fopen(MODE_WRITE, FILE_FAN_SPEED, index);
 	if (file == NULL) {
-		QUIT_DAEMON("Failed to set the speed of fan 1, is applesmc loaded?");
+		QUIT_DAEMON("Failed to set the speed of fan %d, is applesmc loaded?", index);
 	}
 
 	fprintf(file, "%d", speed);
 	fclose(file);
-	return;
 }
 
 void write_fan_manual(int index, int manual){
 	FILE *file;
-	char *filename;
 
-	filename = mfc_sprintf(FILE_FAN_MANUAL, index);
-	file = fopen(filename, "w");
-	free(filename);
+	file = mfc_fopen(MODE_WRITE, FILE_FAN_MANUAL, index);
+	if (file == NULL) {
+		QUIT_DAEMON("Failed to change the manual setting of fan %d, is applesmc loaded?", index);
+	}
 
-	if (file != NULL) {
-		fprintf(file, "%d", manual);
-		fclose(file);
-	}
-	else {
-		QUIT_DAEMON("Failed to set the 'manual' of fan 1, is applesmc loaded?");
-	}
+	fprintf(file, "%d", manual);
+	fclose(file);
 }
 
 int set_min_max_fan_speed(int fan_speed){
@@ -305,24 +301,26 @@ int log_fan_speed(int fan_speed,int change_number,int temp){
 }
 
 void write_pidfile(){
-	FILE *file;
-	if((file=fopen(PIDFILE,"w"))!=NULL){
-		fprintf(file,"%d",getpid());
-		fclose(file);
-	}
-	else{
+	FILE *file = mfc_fopen(MODE_WRITE, PIDFILE);
+	if (file == NULL) {
 		QUIT_DAEMON("Can't write PID file %s", PIDFILE);
 	}
+
+	fprintf(file,"%d",getpid());
+	fclose(file);
 }
 
 
 void check_pidfile(){
-	FILE *file;
-	if((file=fopen(PIDFILE,"r"))!=NULL){
-		/* if PIDFILE exist */
-		fclose(file);
-		QUIT_DAEMON("PID file %s already exists, is the daemon running?", PIDFILE);
+	FILE *file = mfc_fopen(MODE_READ, PIDFILE);
+	if (file == NULL) {
+		/* We are expecting that the fiel DOES NOT exist, so there should be an error */
+		return;
 	}
+
+	/* if PIDFILE exist */
+	fclose(file);
+	QUIT_DAEMON("PID file %s already exists, is the daemon running?", PIDFILE);
 }
 
 
@@ -331,22 +329,23 @@ int check_cpu(){
 	char buffer[80];
 	int cpucount=0;
 
-	if((file=fopen(CPUINFO,"r"))!=NULL){
-		while (!feof(file)) {
-			fgets(buffer, sizeof(buffer),file);
-			if (!strncmp(buffer,"model name	: Intel(R) Core(TM)2 Duo CPU",39)){
-				cpucount++;
-				if (cpucount==1){
-					syslog(LOG_INFO,"CPU: %s",buffer);
-				}
-			}
-		}
-		fclose(file);
-		syslog(LOG_INFO,"cpu counts %d", cpucount);
-	}
-	else{
+	file = mfc_fopen(MODE_READ, CPUINFO);
+	if (file == NULL) {
 		QUIT_DAEMON("Can't read the CPU type from %s", CPUINFO);
 	}
+
+	while (!feof(file)) {
+		fgets(buffer, sizeof(buffer),file);
+		if (!strncmp(buffer, CPU_LABEL, strlen(CPU_LABEL))) {
+			cpucount++;
+			if (cpucount == 1) {
+				syslog(LOG_INFO, "CPU: %s", buffer);
+			}
+		}
+	}
+
+	fclose(file);
+	syslog(LOG_INFO, "cpu counts %d", cpucount);
 
 	return cpucount;
 }

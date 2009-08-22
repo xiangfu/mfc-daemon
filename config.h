@@ -32,13 +32,8 @@
 #define TV_SEC	5		/*  */
 #define TV_NSEC	0		/*  */
 
-#define FAN_1_MANUAL "/sys/devices/platform/applesmc.768/fan1_manual"
-#define RD_FAN_1 "/sys/devices/platform/applesmc.768/fan1_input"
-#define WR_FAN_1 "/sys/devices/platform/applesmc.768/fan1_output"
+#define FILE_FAN_MANUAL "/sys/devices/platform/applesmc.768/fan%d_manual"
+#define FILE_FAN_SPEED  "/sys/devices/platform/applesmc.768/fan%d_output"
 
-#define RD_CPU_1_TEMP "/sys/devices/platform/coretemp.0/temp1_input"
-#define RD_CPU_2_TEMP "/sys/devices/platform/coretemp.1/temp1_input"
-
-#define FAN_2_MANUAL "/sys/devices/platform/applesmc.768/fan2_manual"
-#define RD_FAN_2 "/sys/devices/platform/applesmc.768/fan2_input"
-#define WR_FAN_2 "/sys/devices/platform/applesmc.768/fan2_output"
+/* Starts at 0 */
+#define FILE_CPU_TEMP "/sys/devices/platform/coretemp.%d/temp1_input"

@@ -19,6 +19,7 @@
  * Boston, MA  02110-1301, USA
  */
 
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -35,14 +36,9 @@
 
 #define QUIT_DAEMON(message, ...) quit_daemon(message " [%s:%d]", ##__VA_ARGS__, __FUNCTION__, __LINE__)
 
-void write_fan_2_manual(int);
-void write_fan_2_speed(int);
-
-int read_cpu_1_temp(void);
-int read_cpu_2_temp(void);
-
-void write_fan_1_manual(int);
-void write_fan_1_speed(int);
+void write_fan_manual(int, int);
+void write_fan_speed(int, int);
+int read_cpu_temp(int);
 
 void write_pidfile(void);
 void check_pidfile(void);
@@ -63,13 +59,13 @@ typedef struct _MfcCtx {
 MfcCtx MFC = {0,};
 
 void quit_daemon (char *format, ...) {
-		va_list args;
+	va_list args;
 
-		va_start(args, format);
-		vsyslog(LOG_ERR, format, args);
+	va_start(args, format);
+	vsyslog(LOG_ERR, format, args);
 //	vprintf(format, args);
 //	printf("\n");
-		va_end(args);
+	va_end(args);
 
 	closelog();
 	if (MFC.pidfile_created) {
@@ -78,6 +74,20 @@ void quit_daemon (char *format, ...) {
 	exit(ERROR);
 }
 
+char* mfc_sprintf (const char *format, ...) {
+	char *string;
+	int code;
+	va_list args;
+
+	va_start(args, format);
+	code = vasprintf(&string, format, args);
+	va_end(args);
+
+	if (code < 0) {
+		QUIT_DAEMON("Failed to allocate");
+	}
+	return string;
+}
 
 void Signal_Handler(int sig){
 	switch(sig){
@@ -85,9 +95,9 @@ void Signal_Handler(int sig){
 			break;
 		case SIGTERM:
 			syslog(LOG_INFO, "Signal_Handler");
-			write_fan_1_manual(0);
+			write_fan_manual(1, 0);
 			if (MFC.cpucount > 1) {
-				write_fan_2_manual(0);
+				write_fan_manual(2, 0);
 			}
 			QUIT_DAEMON("Stop");
 			break;
@@ -99,7 +109,7 @@ void start_daemon(void){
 	pid_t pid;
 	pid=fork();
 
-	if (pid<0){ 
+	if (pid<0){
 		/* fork error */
 		QUIT_DAEMON("Error cannot fork");
 	}
@@ -113,7 +123,7 @@ void start_daemon(void){
 		QUIT_DAEMON("Error setsid");
 	}
 
-	for (i=getdtablesize();i>=0;--i) close(i); 
+	for (i=getdtablesize();i>=0;--i) close(i);
 	umask(027);
 	chdir("/");
 }
@@ -134,9 +144,9 @@ int main(int argc, char **argv){
 	check_pidfile();
 	write_pidfile();
 	MFC.pidfile_created = 1;
-	write_fan_1_manual(1);
+	write_fan_manual(1, 1);
 	if (MFC.cpucount > 1) {
-		write_fan_2_manual(1);
+		write_fan_manual(1, 1);
 	}
 	start_daemon();
 
@@ -152,30 +162,30 @@ int main(int argc, char **argv){
 
 	syslog(LOG_INFO,"Start");
 
-	int rd_cpu_1_temp=read_cpu_1_temp();
-	int rd_cpu_2_temp=read_cpu_2_temp();
+	int rd_cpu_1_temp=read_cpu_temp(1);
+	int rd_cpu_2_temp=read_cpu_temp(2);
 
 	int temp=(rd_cpu_1_temp + rd_cpu_2_temp)/2000;
 	int old_temp=(rd_cpu_1_temp + rd_cpu_2_temp)/2000;
 	int fan_speed=GET_FAN_SPEED(temp);
 
 	fan_speed=set_min_max_fan_speed(fan_speed);
-	write_fan_1_speed(fan_speed);	
+	write_fan_speed(1, fan_speed);
 	if (MFC.cpucount > 1) {
-		write_fan_2_speed(fan_speed);
+		write_fan_speed(2, fan_speed);
 	}
 
 	while(1){
 
-		rd_cpu_1_temp = read_cpu_1_temp();
-		rd_cpu_2_temp = read_cpu_2_temp();
+		rd_cpu_1_temp = read_cpu_temp(1);
+		rd_cpu_2_temp = read_cpu_temp(2);
 
 		wr_manual++;
 
 		if (wr_manual==9){
-			write_fan_1_manual(1);
+			write_fan_manual(1, 1);
 			if (MFC.cpucount > 1) {
-				write_fan_2_manual(1);
+				write_fan_manual(2, 1);
 			}
 			wr_manual=0;
 		}
@@ -197,9 +207,9 @@ int main(int argc, char **argv){
 			fan_speed=set_min_max_fan_speed(fan_speed);
 
 			if (fan_speed!=old_fan_speed){
-				write_fan_1_speed(fan_speed);
+				write_fan_speed(1, fan_speed);
 				if (MFC.cpucount > 1) {
-					write_fan_2_speed(fan_speed);
+					write_fan_speed(2, fan_speed);
 				}
 				change_number=log_fan_speed(fan_speed,change_number,temp);
 				old_fan_speed=fan_speed;
@@ -217,78 +227,61 @@ int main(int argc, char **argv){
 	}
 }
 
-int read_cpu_1_temp(void){
+int read_cpu_temp(int index){
 	int temp;
 	FILE *file;
-
-	if ((file=fopen(RD_CPU_1_TEMP,"r"))!=NULL){
-		fscanf(file,"%d",&temp);
-		fclose(file);
-		return temp;
-	}
-	QUIT_DAEMON("Failed to read the temperature of CPU 1");
-	return 0;
-}
-
-int read_cpu_2_temp(void){
-	int temp;
-	FILE *file;
+	char *filename;
 
 	if (MFC.cpucount == 1) {
 		// If there's a single core pretend that the second core has the same
 		// temperature as the first core.
-		return read_cpu_1_temp();
+		index = 1;
 	}
-	
-	if ((file=fopen(RD_CPU_2_TEMP,"r"))!=NULL){
-		fscanf(file,"%d", &temp);
-		fclose(file);
-		return temp;
+
+	/* The CPU temperature file index starts at 0 */
+	filename = mfc_sprintf(FILE_CPU_TEMP, index - 1);
+	file = fopen(filename, "r");
+	free(filename);
+
+	if (file == NULL) {
+		QUIT_DAEMON("Failed to read the temperature of CPU %d", index);
 	}
-	QUIT_DAEMON("Failed to read the temperature of CPU 2");
-	return 0;
+
+	fscanf(file, "%d", &temp);
+	fclose(file);
+	return temp;
 }
 
-void write_fan_1_speed(int fan_speed_1){
+void write_fan_speed(int index, int speed){
 	FILE *file;
+	char *filename;
 
-	if((file=fopen(WR_FAN_1, "w"))!=NULL){
-		fprintf(file,"%d",fan_speed_1);
-		fclose(file);
-		return;
-	}
-	QUIT_DAEMON("Failed to set the speed of fan 1, is applesmc loaded?");
-}
+	filename = mfc_sprintf(FILE_FAN_SPEED, index);
+	file = fopen(filename, "w");
+	free(filename);
 
-void write_fan_1_manual(int fan_manual_1){
-	FILE *file;
-	if((file=fopen(FAN_1_MANUAL, "w"))!=NULL){
-		fprintf(file,"%d",fan_manual_1);
-		fclose(file);
-	}else{
-		QUIT_DAEMON("Failed to set the 'manual' of fan 1, is applesmc loaded?");
-	}
-}
-
-void write_fan_2_speed(int fan_speed_2){
-	FILE *file;
-
-	if((file=fopen(WR_FAN_2, "w"))!=NULL){
-		fprintf(file,"%d",fan_speed_2);
-		fclose(file);
-	}
-	else{
+	if (file == NULL) {
 		QUIT_DAEMON("Failed to set the speed of fan 1, is applesmc loaded?");
 	}
+
+	fprintf(file, "%d", speed);
+	fclose(file);
+	return;
 }
 
-void write_fan_2_manual(int fan_manual_2){
+void write_fan_manual(int index, int manual){
 	FILE *file;
-	if((file=fopen(FAN_2_MANUAL, "w"))!=NULL){
-		fprintf(file,"%d",fan_manual_2);
+	char *filename;
+
+	filename = mfc_sprintf(FILE_FAN_MANUAL, index);
+	file = fopen(filename, "w");
+	free(filename);
+
+	if (file != NULL) {
+		fprintf(file, "%d", manual);
 		fclose(file);
 	}
-	else{
+	else {
 		QUIT_DAEMON("Failed to set the 'manual' of fan 1, is applesmc loaded?");
 	}
 }
@@ -350,7 +343,7 @@ int check_cpu(){
 		}
 		fclose(file);
 		syslog(LOG_INFO,"cpu counts %d", cpucount);
-	}	
+	}
 	else{
 		QUIT_DAEMON("Can't read the CPU type from %s", CPUINFO);
 	}

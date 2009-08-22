@@ -50,8 +50,17 @@ int check_cpu(void);
 int log_fan_speed(int,int,int);
 int set_min_max_fan_speed(int);
 
-static int cpucount = 0;
-static int pidfile_created = 0;
+
+/**
+ * The daemon's global context. This data structure contains all global
+ * variables needed by daemon.
+ */
+typedef struct _MfcCtx {
+	int cpucount;
+	int pidfile_created;
+} MfcCtx;
+
+MfcCtx MFC = {0,};
 
 void quit_daemon (char *format, ...) {
 		va_list args;
@@ -63,7 +72,7 @@ void quit_daemon (char *format, ...) {
 		va_end(args);
 
 	closelog();
-	if (pidfile_created) {
+	if (MFC.pidfile_created) {
 		unlink(PIDFILE);
 	}
 	exit(ERROR);
@@ -77,7 +86,7 @@ void Signal_Handler(int sig){
 		case SIGTERM:
 			syslog(LOG_INFO, "Signal_Handler");
 			write_fan_1_manual(0);
-			if (cpucount > 1) {
+			if (MFC.cpucount > 1) {
 				write_fan_2_manual(0);
 			}
 			QUIT_DAEMON("Stop");
@@ -106,7 +115,7 @@ void start_daemon(void){
 
 	for (i=getdtablesize();i>=0;--i) close(i); 
 	umask(027);
-	chdir ("/");
+	chdir("/");
 }
 
 
@@ -121,12 +130,12 @@ int main(int argc, char **argv){
 
 
 	/* check machine and pidfile*/
-	cpucount = check_cpu();
+	MFC.cpucount = check_cpu();
 	check_pidfile();
 	write_pidfile();
-	pidfile_created = 1;
+	MFC.pidfile_created = 1;
 	write_fan_1_manual(1);
-	if (cpucount > 1) {
+	if (MFC.cpucount > 1) {
 		write_fan_2_manual(1);
 	}
 	start_daemon();
@@ -152,7 +161,7 @@ int main(int argc, char **argv){
 
 	fan_speed=set_min_max_fan_speed(fan_speed);
 	write_fan_1_speed(fan_speed);	
-	if (cpucount > 1) {
+	if (MFC.cpucount > 1) {
 		write_fan_2_speed(fan_speed);
 	}
 
@@ -165,7 +174,7 @@ int main(int argc, char **argv){
 
 		if (wr_manual==9){
 			write_fan_1_manual(1);
-			if (cpucount > 1) {
+			if (MFC.cpucount > 1) {
 				write_fan_2_manual(1);
 			}
 			wr_manual=0;
@@ -189,7 +198,7 @@ int main(int argc, char **argv){
 
 			if (fan_speed!=old_fan_speed){
 				write_fan_1_speed(fan_speed);
-				if (cpucount > 1) {
+				if (MFC.cpucount > 1) {
 					write_fan_2_speed(fan_speed);
 				}
 				change_number=log_fan_speed(fan_speed,change_number,temp);
@@ -225,7 +234,7 @@ int read_cpu_2_temp(void){
 	int temp;
 	FILE *file;
 
-	if (cpucount == 1) {
+	if (MFC.cpucount == 1) {
 		// If there's a single core pretend that the second core has the same
 		// temperature as the first core.
 		return read_cpu_1_temp();
@@ -298,8 +307,7 @@ int set_min_max_fan_speed(int fan_speed){
 
 int log_fan_speed(int fan_speed,int change_number,int temp){
 	change_number++;
-	syslog(LOG_INFO, "Change %d: fan speed %d RPM temperature %d degree celsius",
-		   change_number,fan_speed,temp);
+	syslog(LOG_INFO, "Change %d: fan speed %d RPM temperature %d degree celsius", change_number, fan_speed, temp);
 	return change_number;
 }
 

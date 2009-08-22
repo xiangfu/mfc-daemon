@@ -93,7 +93,7 @@ FILE* mfc_fopen (const char* mode, const char *format, ...) {
 		QUIT_DAEMON("Failed to allocate filename for pattern %s", format);
 	}
 
-	file = open(filename, mode);
+	file = fopen(filename, mode);
 	free(filename);
 
 	return file;

@@ -102,16 +102,20 @@ FILE* mfc_fopen (const char* mode, const char *format, ...) {
 void Signal_Handler(int sig){
 	switch(sig){
 		case SIGHUP:
-			break;
+		break;
+
 		case SIGTERM:
-			syslog(LOG_INFO, "Signal_Handler");
-			write_fan_manual(1, 0);
-			if (MFC.cpucount > 1) {
-				write_fan_manual(2, 0);
+			{
+				int cpu;
+				syslog(LOG_INFO, "Signal_Handler");
+
+				for (cpu = 1; cpu <= MFC.cpucount; ++cpu) {
+					write_fan_manual(cpu, 0);
+				}
+				QUIT_DAEMON("Stop");
 			}
-			QUIT_DAEMON("Stop");
-			break;
-		}
+		break;
+	}
 }
 
 void start_daemon(void){
@@ -123,7 +127,6 @@ void start_daemon(void){
 		/* fork error */
 		QUIT_DAEMON("Error cannot fork");
 	}
-
 	else if (pid>0){
 		exit(OK);
 		/* child continues */
@@ -257,9 +260,7 @@ int read_cpu_temp(int index){
 }
 
 void write_fan_speed(int index, int speed){
-	FILE *file;
-
-	file = mfc_fopen(MODE_WRITE, FILE_FAN_SPEED, index);
+	FILE *file = mfc_fopen(MODE_WRITE, FILE_FAN_SPEED, index);
 	if (file == NULL) {
 		QUIT_DAEMON("Failed to set the speed of fan %d, is applesmc loaded?", index);
 	}
@@ -269,9 +270,7 @@ void write_fan_speed(int index, int speed){
 }
 
 void write_fan_manual(int index, int manual){
-	FILE *file;
-
-	file = mfc_fopen(MODE_WRITE, FILE_FAN_MANUAL, index);
+	FILE *file = mfc_fopen(MODE_WRITE, FILE_FAN_MANUAL, index);
 	if (file == NULL) {
 		QUIT_DAEMON("Failed to change the manual setting of fan %d, is applesmc loaded?", index);
 	}
@@ -333,7 +332,7 @@ int check_cpu(){
 	}
 
 	while (!feof(file)) {
-		fgets(buffer, sizeof(buffer),file);
+		fgets(buffer, sizeof(buffer), file);
 		if (!strncmp(buffer, CPU_LABEL, strlen(CPU_LABEL))) {
 			cpucount++;
 			if (cpucount == 1) {

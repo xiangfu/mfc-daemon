@@ -342,10 +342,28 @@ int check_cpu(){
 }
 
 int get_cpu_temperature() {
-	int rd_cpu_1_temp=read_cpu_temp(1);
-	int rd_cpu_2_temp=read_cpu_temp(2);
 
-	int temp=(rd_cpu_1_temp + rd_cpu_2_temp)/2000;
+	int total_cpus = MFC.cpucount;
+	if (total_cpus == 1) {
+		/* Assume that the computer has 2 CPUs (2 cores). Some Mac laptops have
+		   to be booted with maxcores=1 or acpi=off, this is true for the
+		   MacBook 5,1. Both options diseable the second core and Linux sees a
+		   single one.
+
+		   When computing the temperature it could be wiser to assume that the
+		   temperature was computed for two cores. Although I'm not too sure
+		   about this.
+		 */
+		total_cpus = 2;
+	}
+
+
+	int temp = 0;
+	int cpu;
+	for (cpu = 1; cpu <= total_cpus; ++cpu) {
+		temp += read_cpu_temp(cpu);
+	}
+	temp /= 2000;
 
 	return temp;
 }

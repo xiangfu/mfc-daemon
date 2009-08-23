@@ -30,7 +30,11 @@
 #include <syslog.h>
 #include <stdarg.h>
 #include <errno.h>
+#include <getopt.h>
 #include "config.h"
+
+#define TRUE  1
+#define FALSE 0
 
 #define MODE_WRITE "w"
 #define MODE_READ  "r"
@@ -40,9 +44,30 @@
 #define QUIT_DAEMON(message, ...) quit_daemon(message " [%s:%d]", ##__VA_ARGS__, __FUNCTION__, __LINE__)
 #define FILE_EXISTS(filename) (access(filename, F_OK) == 0)
 
-#define INFO(message, ...)  syslog(LOG_INFO, message " [%s:%d]", ##__VA_ARGS__, __FUNCTION__, __LINE__)
-#define ERROR(message, ...) syslog(LOG_ERR,  message " [%s:%d]", ##__VA_ARGS__, __FUNCTION__, __LINE__)
+#define INFO(message, ...)  LOG(LOG_INFO, message, ##__VA_ARGS__)
+#define ERROR(message, ...) LOG(LOG_ERR,  message, ##__VA_ARGS__)
+#define LOG(level, message, ...) mfc_log(level,  message " [%s:%d]", ##__VA_ARGS__, __FUNCTION__, __LINE__)
 
+#define OPTION_END { 0, }
+#define OPTION_NOARG(name, letter, var)	{ name, no_argument, var, letter }
+#define OPTION_REQUIRED(name, letter, var) { name, required_argument, var, letter }
+#define OPTION_OPTIONAL(name, letter, var) { name, optional_argument, var, letter }
+
+
+/**
+ * The daemon's global context. This data structure contains all global
+ * variables needed by daemon.
+ */
+typedef struct _MfcCtx {
+	int total_cpus;
+	int total_fans;
+	int pidfile;
+	int syslog;
+	int fork;
+	int stdout;
+} MfcCtx;
+
+MfcCtx MFC = {0,};
 
 
 void write_fan_manual(int, int);
@@ -56,30 +81,45 @@ int check_fan(void);
 int log_fan_speed(int,int,int);
 int set_min_max_fan_speed(int);
 int get_cpu_temperature(void);
+void parse_options (int argc, char * const argv[]);
 
-/**
- * The daemon's global context. This data structure contains all global
- * variables needed by daemon.
- */
-typedef struct _MfcCtx {
-	int total_cpus;
-	int total_fans;
-	int pidfile_created;
-} MfcCtx;
 
-MfcCtx MFC = {0,};
+void mfc_log (int level, char *format, ...) {
+	va_list args;
+
+	va_start(args, format);
+
+	if (MFC.syslog) {
+		vsyslog(level, format, args);
+	}
+
+	if (MFC.stdout) {
+		vprintf(format, args);
+		printf("\n");
+	}
+
+	va_end(args);
+}
 
 void quit_daemon (char *format, ...) {
 	va_list args;
 
 	va_start(args, format);
-	vsyslog(LOG_ERR, format, args);
-//	vprintf(format, args);
-//	printf("\n");
+
+
+	if (MFC.syslog) {
+		vsyslog(LOG_ERR, format, args);
+		closelog();
+	}
+
+	if (MFC.stdout) {
+		vprintf(format, args);
+		printf("\n");
+	}
+
 	va_end(args);
 
-	closelog();
-	if (MFC.pidfile_created) {
+	if (MFC.pidfile) {
 		unlink(PIDFILE);
 	}
 	exit(EXIT_FAILURE);
@@ -123,7 +163,7 @@ FILE* mfc_fopen (const char* mode, const char *format, ...) {
 	file = fopen(filename, mode);
 	if (file == NULL) {
 		ERROR(
-            "Failed to open %s in mode %s because: %s",
+			"Failed to open %s in mode %s because: %s",
 			filename, mode, strerror(errno)
 		);
 	}
@@ -175,7 +215,11 @@ void start_daemon(void){
 }
 
 
-int main(int argc, char **argv){
+int main(int argc, char * const argv[]){
+
+	/* Parse the command line arguments */
+	MFC.fork = TRUE;
+	parse_options(argc, argv);
 
 	signal(SIGHUP,Signal_Handler);		/* hangup signal */
 	signal(SIGTERM,Signal_Handler);		/* software termination signal from kill */
@@ -183,6 +227,7 @@ int main(int argc, char **argv){
 	struct timespec timx,tim1;
 
 	openlog("mfc-daemon", LOG_PID, LOG_DAEMON);
+	MFC.syslog = TRUE;
 
 
 	/* check machine and pidfile*/
@@ -190,9 +235,11 @@ int main(int argc, char **argv){
 	MFC.total_fans = check_fan();
 	check_pidfile();
 	write_pidfile();
-	MFC.pidfile_created = 1;
+	MFC.pidfile = TRUE;
 
-	start_daemon();
+	if (MFC.fork) {
+		start_daemon();
+	}
 
 	int fan;
 	for (fan = 1; fan <= MFC.total_fans; ++fan) {
@@ -419,3 +466,30 @@ int get_cpu_temperature() {
 
 	return temp;
 }
+
+
+void parse_options (int argc, char * const argv[]) {
+
+	struct option longopts[] = {
+		OPTION_NOARG("help", 'h', NULL),
+		OPTION_NOARG("no-fork", FALSE, &MFC.fork),
+		OPTION_NOARG("stdout", 's', &MFC.stdout),
+		OPTION_END,
+	};
+
+	while (TRUE) {
+		int c = getopt_long(argc, argv, "hXs", longopts, NULL);
+		if (c == -1) {
+			break;
+		}
+
+		switch (c) {
+			case 'h':
+				{
+					QUIT_DAEMON("Usage: mfc-daemon [OPTION]...");
+				}
+			break;
+		}
+	}
+}
+

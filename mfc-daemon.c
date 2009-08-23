@@ -231,13 +231,13 @@ int main(int argc, char **argv){
 		}
 
 		temp = get_cpu_temperature();
-		if (temp<old_temp){
+		if (temp < old_temp){
 			cold++;
-			hot=0;
+			hot = 0;
 		}
-		if (temp>old_temp){
+		else if (temp > old_temp){
 			hot++;
-			cold=0;
+			cold = 0;
 		}
 
 		if ((cold==3)||(hot==3)){

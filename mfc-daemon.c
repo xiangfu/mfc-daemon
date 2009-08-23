@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <time.h>
 #include <signal.h>
 #include <string.h>
@@ -31,6 +32,10 @@
 #include <stdarg.h>
 #include <errno.h>
 #include <getopt.h>
+#include <dirent.h>
+#include <regex.h>
+#include <libgen.h>
+
 #include "config.h"
 
 #define TRUE  1
@@ -422,21 +427,37 @@ int check_cpu(){
 
 int check_fan() {
 
-	int fan = 0;
-	for (fan = 1; fan <= 64; ++fan) {
-		char *filename = mfc_sprintf(FILE_FAN_MANUAL, fan);
-		int exists = FILE_EXISTS(filename);
-		free(filename);
+	// Regexp that matches "fan1_manual", "fan2_manual", etc
+	regex_t regexp = {0,};
+	regcomp(&regexp, "^fan[0-9]+_manual$", REG_NOSUB | REG_EXTENDED);
 
-		if (!exists) {
-			--fan;
+	char *copy = strdup(FILE_FAN_MANUAL);
+	char *foldername = dirname(copy);
+
+	DIR *dir = opendir(foldername);
+	if (dir == NULL) {
+		QUIT_DAEMON("Failed to scan fans in folder %s\n", foldername);
+		free(copy);
+	}
+	free(copy);
+
+	int fans = 0;
+	while (TRUE) {
+		struct dirent *entry = readdir(dir);
+		if (entry == NULL) {
 			break;
 		}
+
+		if (regexec(&regexp, entry->d_name, 0, NULL, 0) == 0) {
+			++fans;
+		}
 	}
+	closedir(dir);
+	regfree(&regexp);
 
-	INFO("Detected %d fans", fan);
+	INFO("Detected %d fans", fans);
 
-	return fan;
+	return fans;
 }
 
 

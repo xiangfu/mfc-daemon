@@ -32,9 +32,6 @@
 #include <errno.h>
 #include "config.h"
 
-#define ERROR -1
-#define OK 0
-
 #define MODE_WRITE "w"
 #define MODE_READ  "r"
 
@@ -42,6 +39,10 @@
 
 #define QUIT_DAEMON(message, ...) quit_daemon(message " [%s:%d]", ##__VA_ARGS__, __FUNCTION__, __LINE__)
 #define FILE_EXISTS(filename) (access(filename, F_OK) == 0)
+
+#define INFO(message, ...)  syslog(LOG_INFO, message " [%s:%d]", ##__VA_ARGS__, __FUNCTION__, __LINE__)
+#define ERROR(message, ...) syslog(LOG_ERR,  message " [%s:%d]", ##__VA_ARGS__, __FUNCTION__, __LINE__)
+
 
 
 void write_fan_manual(int, int);
@@ -81,7 +82,7 @@ void quit_daemon (char *format, ...) {
 	if (MFC.pidfile_created) {
 		unlink(PIDFILE);
 	}
-	exit(ERROR);
+	exit(EXIT_FAILURE);
 }
 
 char* mfc_vsprintf (const char *format, va_list args) {
@@ -117,12 +118,12 @@ FILE* mfc_fopen (const char* mode, const char *format, ...) {
 	filename = mfc_vsprintf(format, args);
 	va_end(args);
 
-	syslog(LOG_INFO, "Open file: %s in mode %s", filename, mode);
+	INFO("Open file: %s in mode %s", filename, mode);
 	errno = 0;
 	file = fopen(filename, mode);
 	if (file == NULL) {
-		syslog(
-			LOG_ERR, "Failed to open %s in mode %s because: %s",
+		ERROR(
+            "Failed to open %s in mode %s because: %s",
 			filename, mode, strerror(errno)
 		);
 	}
@@ -139,7 +140,7 @@ void Signal_Handler(int sig){
 		case SIGTERM:
 			{
 				int fan;
-				syslog(LOG_INFO, "Signal_Handler");
+				INFO("Signal handler caught SIGTERM");
 
 				for (fan = 1; fan <= MFC.total_fans; ++fan) {
 					write_fan_manual(fan, 0);
@@ -160,11 +161,11 @@ void start_daemon(void){
 		QUIT_DAEMON("Error cannot fork");
 	}
 	else if (pid>0){
-		exit(OK);
+		exit(EXIT_SUCCESS);
 		/* child continues */
 	}
 
-	if(setsid() == ERROR){
+	if(setsid() == -1){
 		QUIT_DAEMON("Error setsid");
 	}
 
@@ -208,7 +209,7 @@ int main(int argc, char **argv){
 	int change_number=0;
 	int old_fan_speed=-1;
 
-	syslog(LOG_INFO,"Start");
+	INFO("Start");
 
 	int temp = get_cpu_temperature();
 	int old_temp = temp;
@@ -219,8 +220,8 @@ int main(int argc, char **argv){
 	for (fan = 1; fan <= MFC.total_fans; ++fan) {
 		write_fan_speed(fan, fan_speed);
 	}
-	while(1){
 
+	while (1){
 
 		wr_manual++;
 		if (wr_manual==9){
@@ -259,7 +260,7 @@ int main(int argc, char **argv){
 
 		old_temp=temp;
 
-		if (nanosleep(&tim1,&timx) < OK){
+		if (nanosleep(&tim1,&timx) == -1){
 			QUIT_DAEMON("Error nanosleep");
 		}
 	}
@@ -320,7 +321,7 @@ int set_min_max_fan_speed(int fan_speed){
 
 int log_fan_speed(int fan_speed,int change_number,int temp){
 	change_number++;
-	syslog(LOG_INFO, "Change %d: fan speed %d RPM temperature %d degree celsius", change_number, fan_speed, temp);
+	INFO("Change %d: fan speed %d RPM temperature %d degree celsius", change_number, fan_speed, temp);
 	return change_number;
 }
 
@@ -367,7 +368,7 @@ int check_cpu(){
 	}
 
 	fclose(file);
-	syslog(LOG_INFO, "Detected %d CPUs", total_cpus);
+	INFO("Detected %d CPUs", total_cpus);
 
 	return total_cpus;
 }
@@ -387,7 +388,7 @@ int check_fan() {
 		}
 	}
 
-	syslog(LOG_INFO, "Detected %d fans", fan);
+	INFO("Detected %d fans", fan);
 
 	return fan;
 }

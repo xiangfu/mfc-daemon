@@ -158,7 +158,6 @@ FILE* mfc_fopen (const char* mode, const char *format, ...) {
 	filename = mfc_vsprintf(format, args);
 	va_end(args);
 
-	INFO("Open file: %s in mode %s", filename, mode);
 	errno = 0;
 	file = fopen(filename, mode);
 	if (file == NULL) {

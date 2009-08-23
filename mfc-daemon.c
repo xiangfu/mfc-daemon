@@ -29,6 +29,7 @@
 #include <string.h>
 #include <syslog.h>
 #include <stdarg.h>
+#include <errno.h>
 #include "config.h"
 
 #define ERROR -1
@@ -40,6 +41,8 @@
 #define CPU_LABEL  "model name	: Intel(R) Core(TM)2 Duo CPU"
 
 #define QUIT_DAEMON(message, ...) quit_daemon(message " [%s:%d]", ##__VA_ARGS__, __FUNCTION__, __LINE__)
+#define FILE_EXISTS(filename) (access(filename, F_OK) == 0)
+
 
 void write_fan_manual(int, int);
 void write_fan_speed(int, int);
@@ -48,6 +51,7 @@ int read_cpu_temp(int);
 void write_pidfile(void);
 void check_pidfile(void);
 int check_cpu(void);
+int check_fan(void);
 int log_fan_speed(int,int,int);
 int set_min_max_fan_speed(int);
 int get_cpu_temperature(void);
@@ -57,7 +61,8 @@ int get_cpu_temperature(void);
  * variables needed by daemon.
  */
 typedef struct _MfcCtx {
-	int cpucount;
+	int total_cpus;
+	int total_fans;
 	int pidfile_created;
 } MfcCtx;
 
@@ -79,21 +84,48 @@ void quit_daemon (char *format, ...) {
 	exit(ERROR);
 }
 
+char* mfc_vsprintf (const char *format, va_list args) {
+	char *string;
+	int code;
+
+	code = vasprintf(&string, format, args);
+	if (code < 0) {
+		va_end(args);
+		QUIT_DAEMON("Failed to allocate filename for pattern %s", format);
+	}
+
+	return string;
+}
+
+char* mfc_sprintf (const char *format, ...) {
+	char *string;
+	va_list args;
+
+	va_start(args, format);
+	string = mfc_vsprintf(format, args);
+	va_end(args);
+
+	return string;
+}
+
 FILE* mfc_fopen (const char* mode, const char *format, ...) {
 	char *filename;
-	int code;
 	va_list args;
 	FILE *file;
 
 	va_start(args, format);
-	code = vasprintf(&filename, format, args);
+	filename = mfc_vsprintf(format, args);
 	va_end(args);
 
-	if (code < 0) {
-		QUIT_DAEMON("Failed to allocate filename for pattern %s", format);
-	}
-
+	syslog(LOG_INFO, "Open file: %s in mode %s", filename, mode);
+	errno = 0;
 	file = fopen(filename, mode);
+	if (file == NULL) {
+		syslog(
+			LOG_ERR, "Failed to open %s in mode %s because: %s",
+			filename, mode, strerror(errno)
+		);
+	}
 	free(filename);
 
 	return file;
@@ -106,11 +138,11 @@ void Signal_Handler(int sig){
 
 		case SIGTERM:
 			{
-				int cpu;
+				int fan;
 				syslog(LOG_INFO, "Signal_Handler");
 
-				for (cpu = 1; cpu <= MFC.cpucount; ++cpu) {
-					write_fan_manual(cpu, 0);
+				for (fan = 1; fan <= MFC.total_fans; ++fan) {
+					write_fan_manual(fan, 0);
 				}
 				QUIT_DAEMON("Stop");
 			}
@@ -153,15 +185,18 @@ int main(int argc, char **argv){
 
 
 	/* check machine and pidfile*/
-	MFC.cpucount = check_cpu();
+	MFC.total_cpus = check_cpu();
+	MFC.total_fans = check_fan();
 	check_pidfile();
 	write_pidfile();
 	MFC.pidfile_created = 1;
-	write_fan_manual(1, 1);
-	if (MFC.cpucount > 1) {
-		write_fan_manual(1, 1);
-	}
+
 	start_daemon();
+
+	int fan;
+	for (fan = 1; fan <= MFC.total_fans; ++fan) {
+		write_fan_manual(fan, 1);
+	}
 
 	tim1.tv_sec = TV_SEC;
 	tim1.tv_nsec = TV_NSEC;
@@ -181,17 +216,16 @@ int main(int argc, char **argv){
 
 	fan_speed=set_min_max_fan_speed(fan_speed);
 
-	int cpu;
-	for (cpu = 1; cpu <= MFC.cpucount; ++cpu) {
-		write_fan_speed(cpu, fan_speed);
+	for (fan = 1; fan <= MFC.total_fans; ++fan) {
+		write_fan_speed(fan, fan_speed);
 	}
 	while(1){
 
 
 		wr_manual++;
 		if (wr_manual==9){
-			for (cpu = 1; cpu <= MFC.cpucount; ++cpu) {
-				write_fan_manual(cpu, 1);
+			for (fan = 1; fan <= MFC.total_fans; ++fan) {
+				write_fan_manual(fan, 1);
 			}
 			wr_manual=0;
 		}
@@ -212,8 +246,8 @@ int main(int argc, char **argv){
 			fan_speed=set_min_max_fan_speed(fan_speed);
 
 			if (fan_speed!=old_fan_speed){
-				for (cpu = 1; cpu <= MFC.cpucount; ++cpu) {
-					write_fan_speed(cpu, fan_speed);
+				for (fan = 1; fan <= MFC.total_fans; ++fan) {
+					write_fan_speed(fan, fan_speed);
 				}
 				change_number=log_fan_speed(fan_speed,change_number,temp);
 				old_fan_speed=fan_speed;
@@ -235,7 +269,7 @@ int read_cpu_temp(int index){
 	int temp;
 	FILE *file;
 
-	if (MFC.cpucount == 1) {
+	if (MFC.total_cpus == 1) {
 		// If there's a single core pretend that the second core has the same
 		// temperature as the first core.
 		index = 1;
@@ -302,15 +336,12 @@ void write_pidfile(){
 
 
 void check_pidfile(){
-	FILE *file = mfc_fopen(MODE_READ, PIDFILE);
-	if (file == NULL) {
-		/* We are expecting that the file DOES NOT exist, so there should be an error */
-		return;
+	if (FILE_EXISTS(PIDFILE)) {
+		/* We are expecting that the file DOES NOT exist */
+		QUIT_DAEMON("PID file %s already exists, is the daemon running?", PIDFILE);
 	}
 
-	/* if PIDFILE exist */
-	fclose(file);
-	QUIT_DAEMON("PID file %s already exists, is the daemon running?", PIDFILE);
+	return;
 }
 
 
@@ -318,7 +349,7 @@ int check_cpu(){
 	FILE *file;
 	char *line = NULL;
 	size_t size = 0;
-	int cpucount = 0;
+	int total_cpus = 0;
 
 	file = mfc_fopen(MODE_READ, CPUINFO);
 	if (file == NULL) {
@@ -328,22 +359,43 @@ int check_cpu(){
 	while (!feof(file)) {
 		getline(&line, &size, file);
 		if (!strncmp(line, CPU_LABEL, strlen(CPU_LABEL))) {
-			cpucount++;
-			if (cpucount == 1) {
+			total_cpus++;
+			if (total_cpus == 1) {
 				syslog(LOG_INFO, "CPU: %s", line);
 			}
 		}
 	}
 
 	fclose(file);
-	syslog(LOG_INFO, "cpu counts %d", cpucount);
+	syslog(LOG_INFO, "Detected %d CPUs", total_cpus);
 
-	return cpucount;
+	return total_cpus;
 }
+
+
+int check_fan() {
+
+	int fan = 0;
+	for (fan = 1; fan <= 64; ++fan) {
+		char *filename = mfc_sprintf(FILE_FAN_MANUAL, fan);
+		int exists = FILE_EXISTS(filename);
+		free(filename);
+
+		if (!exists) {
+			--fan;
+			break;
+		}
+	}
+
+	syslog(LOG_INFO, "Detected %d fans", fan);
+
+	return fan;
+}
+
 
 int get_cpu_temperature() {
 
-	int total_cpus = MFC.cpucount;
+	int total_cpus = MFC.total_cpus;
 	if (total_cpus == 1) {
 		/* Assume that the computer has 2 CPUs (2 cores). Some Mac laptops have
 		   to be booted with maxcores=1 or acpi=off, this is true for the
@@ -356,7 +408,6 @@ int get_cpu_temperature() {
 		 */
 		total_cpus = 2;
 	}
-
 
 	int temp = 0;
 	int cpu;

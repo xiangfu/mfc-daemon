@@ -1,11 +1,16 @@
-Origin from:
-http://aur.archlinux.org/packages.php?ID=21391
+input "sudo mfc-daemon" to run this daemon.
 
-now the mfc-daemon.init is not always work.
-so FOR NOW you can run "sudo mfc-daemon" .
-then it's will work fine.
+Install:
+  "make && sudo make install" to install this program 
+
+Author:
+  Xiangfu Liu <xiangfu.z@gmail.com>
+  Emmanuel Rodriguez <emmanuel.rodriguez@booking.com>
+
+Origin from:
+  http://aur.archlinux.org/packages.php?ID=21391
 
 TODO:
-add some option then we  can control the speed 
-no need to change the source code.
+  add some option then we  can control the speed 
+  no need to change the source code.
 

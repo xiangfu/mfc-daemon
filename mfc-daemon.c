@@ -487,7 +487,6 @@ int get_cpu_temperature() {
 	return temp;
 }
 
-
 void parse_options (int argc, char * const argv[]) {
 
 	struct option longopts[] = {
@@ -504,10 +503,15 @@ void parse_options (int argc, char * const argv[]) {
 		}
 
 		switch (c) {
-			case 'h':
-				{
-					QUIT_DAEMON("Usage: mfc-daemon [OPTION]...");
-				}
+		case 'h':
+			MFC.stdout = TRUE;
+			QUIT_DAEMON("mfc-daemon - Macbook Fan Control daemon\n"
+				    "(c) 2009 Xiangfu Liu, Emmanuel Rodriguez\n"
+				    "This program is Free Software and comes with ABSOLUTELY NO WARRANTY.\n\n"
+				    "Usage: mfc-daemon [OPTION]...\n"
+				    "  -h --help\t\t\tPrint this help message\n"
+				    "     --no-fork\t\t\tStart in stand alone mode\n"
+				    "  -s --stdout\t\t\tOutput message to STDOUT\n");
 			break;
 		}
 	}

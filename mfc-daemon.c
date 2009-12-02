@@ -254,8 +254,6 @@ int main(int argc, char * const argv[]){
 	tim1.tv_nsec = TV_NSEC;
 
 	//init
-	int cold=2;
-	int hot=2;
 	int wr_manual=0;
 	int change_number=0;
 	int old_fan_speed=-1;
@@ -263,7 +261,7 @@ int main(int argc, char * const argv[]){
 	INFO("Start");
 
 	int temp = get_cpu_temperature();
-	int old_temp = temp;
+	int old_temp_change = 0;
 	int fan_speed=GET_FAN_SPEED(temp);
 
 	fan_speed=set_min_max_fan_speed(fan_speed);
@@ -283,16 +281,10 @@ int main(int argc, char * const argv[]){
 		}
 
 		temp = get_cpu_temperature();
-		if (temp < old_temp){
-			cold++;
-			hot = 0;
-		}
-		else if (temp > old_temp){
-			hot++;
-			cold = 0;
-		}
+                
+                int diff = abs(temp - old_temp_change);
 
-		if ((cold==3)||(hot==3)){
+		if (diff >= 2){
 			//	temp = average of both cpu's
 			fan_speed=GET_FAN_SPEED(temp);
 			fan_speed=set_min_max_fan_speed(fan_speed);
@@ -304,12 +296,8 @@ int main(int argc, char * const argv[]){
 				change_number=log_fan_speed(fan_speed,change_number,temp);
 				old_fan_speed=fan_speed;
 			}
-
-			cold=0;
-			hot=0;
+			old_temp_change = temp;
 		}
-
-		old_temp=temp;
 
 		if (nanosleep(&tim1,&timx) == -1){
 			QUIT_DAEMON("Error nanosleep");
@@ -507,6 +495,7 @@ void parse_options (int argc, char * const argv[]) {
 			MFC.stdout = TRUE;
 			QUIT_DAEMON("mfc-daemon - Macbook Fan Control daemon\n"
 				    "(c) 2009 Xiangfu Liu, Emmanuel Rodriguez\n"
+                                    "Patched by Luigi R. Viggiano for simpler fan control\n"
 				    "This program is Free Software and comes with ABSOLUTELY NO WARRANTY.\n\n"
 				    "Usage: mfc-daemon [OPTION]...\n"
 				    "  -h --help\t\t\tPrint this help message\n"

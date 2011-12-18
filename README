@@ -1,7 +1,7 @@
 input "sudo mfc-daemon" to run this daemon.
 
 Install:
-  "make && sudo make install" to install this program 
+  "make && sudo make install" to install this program
 
 Author:
   Xiangfu Liu <xiangfu.z@gmail.com>
@@ -11,6 +11,6 @@ Origin from:
   http://aur.archlinux.org/packages.php?ID=21391
 
 TODO:
-  add some option then we  can control the speed 
+  add some option then we  can control the speed
   no need to change the source code.
 

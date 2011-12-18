@@ -281,7 +281,7 @@ int main(int argc, char * const argv[]){
 		}
 
 		temp = get_cpu_temperature();
-                
+
                 int diff = abs(temp - old_temp_change);
 
 		if (diff >= 2){

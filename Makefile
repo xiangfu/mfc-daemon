@@ -1,5 +1,5 @@
 #
-# (C) Copyright  2009 
+# (C) Copyright  2009
 # Author: xiangjun liu <liuxiangj@gmail.com>
 #
 # This program is free software; you can redistribute it and/or
@@ -28,7 +28,7 @@ all: $(TARGETS)
 work: $(OBJS)
 	$(CC) $(LDFLAGS) $(OBJS) -o $@
 
-.c.o: 
+.c.o:
 	$(CC) $(CFLAGS) -c $< -o $@
 
 install::
